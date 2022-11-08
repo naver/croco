@@ -10,6 +10,7 @@ This repository contains the code for running our CroCo model presented in our [
   year={2022}
 }
 ```
+([project page](https://croco.europe.naverlabs.com/public/index.html))
 
 ## License
 
@@ -44,4 +45,8 @@ python -m habitat_sim.utils.datasets_download --uids habitat_test_scenes --data-
 
 ## Interactive demonstration of cross-view completion reconstruction
 
-Run the Notebook demo `interactive_demo.ipynb`
+Run the Notebook demo `interactive_demo.ipynb`.
+
+In this demo, you should be able to sample a random reference viewpoint from an [Habitat](https://github.com/facebookresearch/habitat-sim) test scene. Use the sliders to change viewpoint and and select a masked target view to reconstruct using CroCo.
+![croco_interactive_demo](https://user-images.githubusercontent.com/1822210/200516576-7937bc6a-55f8-49ed-8618-3ddf89433ea4.jpg)
+
