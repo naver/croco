@@ -1,6 +1,8 @@
 # CroCo: Self-Supervised Pre-training for 3D Vision Tasks by Cross-View Completion
 
-This repository contains the code for running our CroCo model presented in our [NeurIPS'22 paper](https://openreview.net/pdf?id=wZEfHUM5ri):
+[[`arXiv`](https://arxiv.org/abs/2210.10716)] [[`project page and demo`](https://croco.europe.naverlabs.com/)]
+
+This repository contains the code for our CroCo model presented in our [NeurIPS'22 paper](https://openreview.net/pdf?id=wZEfHUM5ri):
 
 ```bibtex
 @inproceedings{croco,
@@ -10,7 +12,6 @@ This repository contains the code for running our CroCo model presented in our [
   year={2022}
 }
 ```
-([project page](https://croco.europe.naverlabs.com/public/index.html))
 
 ## License
 
@@ -28,6 +29,9 @@ conda install habitat-sim headless -c conda-forge -c aihabitat
 conda install pytorch torchvision -c pytorch
 conda install notebook ipykernel matplotlib
 conda install ipywidgets widgetsnbextension
+# below is only for pretraining / habitat data generation
+conda install scikit-learn tqdm quaternion opencv
+
 ```
 
 2. Download pretrained model
@@ -50,3 +54,14 @@ Run the Notebook demo `interactive_demo.ipynb`.
 In this demo, you should be able to sample a random reference viewpoint from an [Habitat](https://github.com/facebookresearch/habitat-sim) test scene. Use the sliders to change viewpoint and select a masked target view to reconstruct using CroCo.
 ![croco_interactive_demo](https://user-images.githubusercontent.com/1822210/200516576-7937bc6a-55f8-49ed-8618-3ddf89433ea4.jpg)
 
+## Pre-training 
+
+To pre-train CroCo, please first generate the pre-training data from the Habitat simulator, following the instructions in [datasets/habitat_sim/README.MD](datasets/habitat_sim/README.MD) and then run the following command:
+```
+torchrun --nproc_per_node=4 pretrain.py --output_dir ./output/pretraining/
+```
+
+Our CroCo pre-training was launched on a single server with 4 GPUs.
+It should take around 10 days with A100 or 15 days with V100 to do the 400 pre-training epochs, but decent performances are obtained earlier in training.
+Note that, while the code contains the same scaling rule of the learning rate as MAE, we did not experimented if it is valid in our case.
+The first run can take a few minutes to start, to parse all available pre-training pairs.
