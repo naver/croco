@@ -4,6 +4,8 @@
 
 This repository contains the code for our CroCo model presented in our [NeurIPS'22 paper](https://openreview.net/pdf?id=wZEfHUM5ri):
 
+![image](assets/arch.jpg)
+
 ```bibtex
 @inproceedings{croco,
   title={{CroCo: Self-Supervised Pre-training for 3D Vision Tasks by Cross-View Completion}},
