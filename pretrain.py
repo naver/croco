@@ -40,7 +40,7 @@ def get_args_parser():
     parser.add_argument('--norm_pix_loss', default=1, choices=[0,1], help="apply per-patch mean/std normalization before applying the loss")
     # dataset 
     parser.add_argument('--dataset', default='habitat_release', type=str, help="training set")
-    parser.add_argument('--transforms', default='homography+rotate10+crop224+acolor', type=str, help="transforms to apply") # in the paper, we also use some homography and rotation, but find later that they were not useful or even harmful
+    parser.add_argument('--transforms', default='crop224+acolor', type=str, help="transforms to apply") # in the paper, we also use some homography and rotation, but find later that they were not useful or even harmful
     # training 
     parser.add_argument('--seed', default=0, type=int, help="Random seed")
     parser.add_argument('--batch_size', default=64, type=int, help="Batch size per GPU (effective batch size is batch_size * accum_iter * # gpus")
