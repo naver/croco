@@ -43,7 +43,7 @@ Download metadata and extract it:
 ```bash
 mkdir -p data/habitat_release_metadata/
 cd data/habitat_release_metadata/
-wget http://download.europe.naverlabs.com/ComputerVision/CroCo/data/habitat_release_metadata/multiview_habitat_metadata.tar.gz
+wget https://download.europe.naverlabs.com/ComputerVision/CroCo/data/habitat_release_metadata/multiview_habitat_metadata.tar.gz
 tar -xvf multiview_habitat_metadata.tar.gz
 cd ../..
 # Location of the metadata

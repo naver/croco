@@ -80,7 +80,7 @@ class Mlp(nn.Module):
 
 class Attention(nn.Module):
 
-    def __init__(self, dim, num_heads=8, qkv_bias=False, attn_drop=0., proj_drop=0.):
+    def __init__(self, dim, rope=None, num_heads=8, qkv_bias=False, attn_drop=0., proj_drop=0.):
         super().__init__()
         self.num_heads = num_heads
         head_dim = dim // num_heads
@@ -89,14 +89,19 @@ class Attention(nn.Module):
         self.attn_drop = nn.Dropout(attn_drop)
         self.proj = nn.Linear(dim, dim)
         self.proj_drop = nn.Dropout(proj_drop)
+        self.rope = rope 
 
-    def forward(self, x):
+    def forward(self, x, xpos):
         B, N, C = x.shape
 
         qkv = self.qkv(x).reshape(B, N, 3, self.num_heads, C // self.num_heads).transpose(1,3)
         q, k, v = [qkv[:,:,i] for i in range(3)]
         # q,k,v = qkv.unbind(2)  # make torchscript happy (cannot use tensor as tuple)
-                
+               
+        if self.rope is not None:
+            q = self.rope(q, xpos)
+            k = self.rope(k, xpos)
+               
         attn = (q @ k.transpose(-2, -1)) * self.scale
         attn = attn.softmax(dim=-1)
         attn = self.attn_drop(attn)
@@ -109,24 +114,24 @@ class Attention(nn.Module):
 class Block(nn.Module):
 
     def __init__(self, dim, num_heads, mlp_ratio=4., qkv_bias=False, drop=0., attn_drop=0.,
-                 drop_path=0., act_layer=nn.GELU, norm_layer=nn.LayerNorm):
+                 drop_path=0., act_layer=nn.GELU, norm_layer=nn.LayerNorm, rope=None):
         super().__init__()
         self.norm1 = norm_layer(dim)
-        self.attn = Attention(dim, num_heads=num_heads, qkv_bias=qkv_bias, attn_drop=attn_drop, proj_drop=drop)
+        self.attn = Attention(dim, rope=rope, num_heads=num_heads, qkv_bias=qkv_bias, attn_drop=attn_drop, proj_drop=drop)
         # NOTE: drop path for stochastic depth, we shall see if this is better than dropout here
         self.drop_path = DropPath(drop_path) if drop_path > 0. else nn.Identity()
         self.norm2 = norm_layer(dim)
         mlp_hidden_dim = int(dim * mlp_ratio)
         self.mlp = Mlp(in_features=dim, hidden_features=mlp_hidden_dim, act_layer=act_layer, drop=drop)
 
-    def forward(self, x):
-        x = x + self.drop_path(self.attn(self.norm1(x)))
+    def forward(self, x, xpos):
+        x = x + self.drop_path(self.attn(self.norm1(x), xpos))
         x = x + self.drop_path(self.mlp(self.norm2(x)))
         return x
 
 class CrossAttention(nn.Module):
     
-    def __init__(self, dim, num_heads=8, qkv_bias=False, attn_drop=0., proj_drop=0.):
+    def __init__(self, dim, rope=None, num_heads=8, qkv_bias=False, attn_drop=0., proj_drop=0.):
         super().__init__()
         self.num_heads = num_heads
         head_dim = dim // num_heads
@@ -139,7 +144,9 @@ class CrossAttention(nn.Module):
         self.proj = nn.Linear(dim, dim)
         self.proj_drop = nn.Dropout(proj_drop)
         
-    def forward(self, query, key, value):
+        self.rope = rope
+        
+    def forward(self, query, key, value, qpos, kpos):
         B, Nq, C = query.shape
         Nk = key.shape[1]
         Nv = value.shape[1]
@@ -147,7 +154,11 @@ class CrossAttention(nn.Module):
         q = self.projq(query).reshape(B,Nq,self.num_heads, C// self.num_heads).permute(0, 2, 1, 3)
         k = self.projk(key).reshape(B,Nk,self.num_heads, C// self.num_heads).permute(0, 2, 1, 3)
         v = self.projv(value).reshape(B,Nv,self.num_heads, C// self.num_heads).permute(0, 2, 1, 3)
-
+        
+        if self.rope is not None:
+            q = self.rope(q, qpos)
+            k = self.rope(k, kpos)
+            
         attn = (q @ k.transpose(-2, -1)) * self.scale
         attn = attn.softmax(dim=-1)
         attn = self.attn_drop(attn)
@@ -160,11 +171,11 @@ class CrossAttention(nn.Module):
 class DecoderBlock(nn.Module):
 
     def __init__(self, dim, num_heads, mlp_ratio=4., qkv_bias=False, drop=0., attn_drop=0.,
-                 drop_path=0., act_layer=nn.GELU, norm_layer=nn.LayerNorm, norm_mem=True):
+                 drop_path=0., act_layer=nn.GELU, norm_layer=nn.LayerNorm, norm_mem=True, rope=None):
         super().__init__()
         self.norm1 = norm_layer(dim)
-        self.attn = Attention(dim, num_heads=num_heads, qkv_bias=qkv_bias, attn_drop=attn_drop, proj_drop=drop)
-        self.cross_attn = CrossAttention(dim, num_heads=num_heads, qkv_bias=qkv_bias, attn_drop=attn_drop, proj_drop=drop)
+        self.attn = Attention(dim, rope=rope, num_heads=num_heads, qkv_bias=qkv_bias, attn_drop=attn_drop, proj_drop=drop)
+        self.cross_attn = CrossAttention(dim, rope=rope, num_heads=num_heads, qkv_bias=qkv_bias, attn_drop=attn_drop, proj_drop=drop)
         self.drop_path = DropPath(drop_path) if drop_path > 0. else nn.Identity()
         self.norm2 = norm_layer(dim)
         self.norm3 = norm_layer(dim)
@@ -172,15 +183,29 @@ class DecoderBlock(nn.Module):
         self.mlp = Mlp(in_features=dim, hidden_features=mlp_hidden_dim, act_layer=act_layer, drop=drop)
         self.norm_y = norm_layer(dim) if norm_mem else nn.Identity()
 
-    def forward(self, x, y):
-        x = x + self.drop_path(self.attn(self.norm1(x)))
+    def forward(self, x, y, xpos, ypos):
+        x = x + self.drop_path(self.attn(self.norm1(x), xpos))
         y_ = self.norm_y(y)
-        x = x + self.drop_path(self.cross_attn(self.norm2(x), y_, y_))
+        x = x + self.drop_path(self.cross_attn(self.norm2(x), y_, y_, xpos, ypos))
         x = x + self.drop_path(self.mlp(self.norm3(x)))
         return x, y
         
         
 # patch embedding
+class PositionGetter(object):
+    """ return positions of patches """
+
+    def __init__(self):
+        self.cache_positions = {}
+        
+    def __call__(self, b, h, w, device):
+        if not (h,w) in self.cache_positions:
+            x = torch.arange(w, device=device)
+            y = torch.arange(h, device=device)
+            self.cache_positions[h,w] = torch.cartesian_prod(y, x) # (h, w, 2)
+        pos = self.cache_positions[h,w].view(1, h*w, 2).expand(b, -1, 2).clone()
+        return pos
+
 class PatchEmbed(nn.Module):
     """ just adding _init_weights + position getter compared to timm.models.layers.patch_embed.PatchEmbed"""
 
@@ -197,15 +222,18 @@ class PatchEmbed(nn.Module):
         self.proj = nn.Conv2d(in_chans, embed_dim, kernel_size=patch_size, stride=patch_size)
         self.norm = norm_layer(embed_dim) if norm_layer else nn.Identity()
         
+        self.position_getter = PositionGetter()
+        
     def forward(self, x):
         B, C, H, W = x.shape
         torch._assert(H == self.img_size[0], f"Input image height ({H}) doesn't match model ({self.img_size[0]}).")
         torch._assert(W == self.img_size[1], f"Input image width ({W}) doesn't match model ({self.img_size[1]}).")
         x = self.proj(x)
+        pos = self.position_getter(B, x.size(2), x.size(3), x.device)
         if self.flatten:
             x = x.flatten(2).transpose(1, 2)  # BCHW -> BNC
         x = self.norm(x)
-        return x
+        return x, pos
         
     def _init_weights(self):
         w = self.proj.weight.data

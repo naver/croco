@@ -14,7 +14,7 @@ import torch.nn as nn
 from functools import partial
 
 from models.blocks import Block, DecoderBlock, PatchEmbed
-from models.pos_embed import get_2d_sincos_pos_embed
+from models.pos_embed import get_2d_sincos_pos_embed, RoPE2D 
 from models.masking import RandomMask
 
 
@@ -23,7 +23,7 @@ class CroCoNet(nn.Module):
     def __init__(self,
                  img_size=224,           # input image size
                  patch_size=16,          # patch_size 
-                 mask_ratio=0.9,        # ratios of masked tokens 
+                 mask_ratio=0.9,         # ratios of masked tokens 
                  enc_embed_dim=768,      # encoder feature dimension
                  enc_depth=12,           # encoder depth 
                  enc_num_heads=12,       # encoder number of heads in the transformer block 
@@ -33,6 +33,7 @@ class CroCoNet(nn.Module):
                  mlp_ratio=4,
                  norm_layer=partial(nn.LayerNorm, eps=1e-6),
                  norm_im2_in_dec=True,   # whether to apply normalization of the 'memory' = (second image) in the decoder 
+                 pos_embed='cosine',     # positional embedding (either cosine or RoPE100)
                 ):
                 
         super(CroCoNet, self).__init__()
@@ -41,39 +42,64 @@ class CroCoNet(nn.Module):
         self.patch_embed = PatchEmbed(img_size, patch_size, 3, enc_embed_dim)
 
         # mask generations
-        self.mask_generator = RandomMask(self.patch_embed.num_patches, mask_ratio)
+        self._set_mask_generator(self.patch_embed.num_patches, mask_ratio)
 
-        # positional embedding of the encoder 
-        enc_pos_embed = get_2d_sincos_pos_embed(enc_embed_dim, int(self.patch_embed.num_patches**.5), n_cls_token=0)
-        self.register_buffer('enc_pos_embed', torch.from_numpy(enc_pos_embed).float())
+        self.pos_embed = pos_embed
+        if pos_embed=='cosine':
+            # positional embedding of the encoder 
+            enc_pos_embed = get_2d_sincos_pos_embed(enc_embed_dim, int(self.patch_embed.num_patches**.5), n_cls_token=0)
+            self.register_buffer('enc_pos_embed', torch.from_numpy(enc_pos_embed).float())
+            # positional embedding of the decoder  
+            dec_pos_embed = get_2d_sincos_pos_embed(dec_embed_dim, int(self.patch_embed.num_patches**.5), n_cls_token=0)
+            self.register_buffer('dec_pos_embed', torch.from_numpy(dec_pos_embed).float())
+            # pos embedding in each block
+            self.rope = None # nothing for cosine 
+        elif pos_embed.startswith('RoPE'): # eg RoPE100 
+            self.enc_pos_embed = None # nothing to add in the encoder with RoPE
+            self.dec_pos_embed = None # nothing to add in the decoder with RoPE
+            if RoPE2D is None: raise ImportError("Cannot find cuRoPE2D, please install it following the README instructions")
+            freq = float(pos_embed[len('RoPE'):])
+            self.rope = RoPE2D(freq=freq)
+        else:
+            raise NotImplementedError('Unknown pos_embed '+pos_embed)
 
         # transformer for the encoder 
         self.enc_blocks = nn.ModuleList([
-            Block(enc_embed_dim, enc_num_heads, mlp_ratio, qkv_bias=True, norm_layer=norm_layer)
+            Block(enc_embed_dim, enc_num_heads, mlp_ratio, qkv_bias=True, norm_layer=norm_layer, rope=self.rope)
             for i in range(enc_depth)])
         self.enc_norm = norm_layer(enc_embed_dim)
         
         # masked tokens 
-        self.mask_token = nn.Parameter(torch.zeros(1, 1, dec_embed_dim))
+        self._set_mask_token(dec_embed_dim)
 
-        # transfer from encoder to decoder 
-        self.decoder_embed = nn.Linear(enc_embed_dim, dec_embed_dim, bias=True)
-
-        # positional embedding of the decoder  
-        dec_pos_embed = get_2d_sincos_pos_embed(dec_embed_dim, int(self.patch_embed.num_patches**.5), n_cls_token=0)
-        self.register_buffer('dec_pos_embed', torch.from_numpy(dec_pos_embed).float())
-                        
-        # transformer for the decoder 
-        self.dec_blocks = nn.ModuleList([
-            DecoderBlock(dec_embed_dim, dec_num_heads, mlp_ratio=mlp_ratio, qkv_bias=True, norm_layer=norm_layer, norm_mem=norm_im2_in_dec)
-            for i in range(dec_depth)])
-        self.dec_norm = norm_layer(dec_embed_dim)
+        # decoder 
+        self._set_decoder(enc_embed_dim, dec_embed_dim, dec_num_heads, dec_depth, mlp_ratio, norm_layer, norm_im2_in_dec)
         
         # prediction head 
-        self.prediction_head = nn.Linear(dec_embed_dim, patch_size**2 * 3, bias=True)
+        self._set_prediction_head(dec_embed_dim, patch_size)
         
         # initializer weights
         self.initialize_weights()           
+        
+    def _set_mask_generator(self, num_patches, mask_ratio):
+        self.mask_generator = RandomMask(num_patches, mask_ratio)
+        
+    def _set_mask_token(self, dec_embed_dim):
+        self.mask_token = nn.Parameter(torch.zeros(1, 1, dec_embed_dim))
+        
+    def _set_decoder(self, enc_embed_dim, dec_embed_dim, dec_num_heads, dec_depth, mlp_ratio, norm_layer, norm_im2_in_dec):
+        # transfer from encoder to decoder 
+        self.decoder_embed = nn.Linear(enc_embed_dim, dec_embed_dim, bias=True)
+        # transformer for the decoder 
+        self.dec_blocks = nn.ModuleList([
+            DecoderBlock(dec_embed_dim, dec_num_heads, mlp_ratio=mlp_ratio, qkv_bias=True, norm_layer=norm_layer, norm_mem=norm_im2_in_dec, rope=self.rope)
+            for i in range(dec_depth)])
+        # final norm layer 
+        self.dec_norm = norm_layer(dec_embed_dim)
+        
+    def _set_prediction_head(self, dec_embed_dim, patch_size):
+         self.prediction_head = nn.Linear(dec_embed_dim, patch_size**2 * 3, bias=True)
+        
         
     def initialize_weights(self):
         # patch embed 
@@ -98,25 +124,29 @@ class CroCoNet(nn.Module):
         image has B x 3 x img_size x img_size 
         masking: whether to perform masking or not
         """
-        # embed the image into patches  (x has size B x Npatches x C)
-        x = self.patch_embed(image)              
+        # embed the image into patches  (x has size B x Npatches x C) 
+        # and get position if each return patch (pos has size B x Npatches x 2)
+        x, pos = self.patch_embed(image)              
         # add positional embedding without cls token  
-        x = x + self.enc_pos_embed[None,...]
+        if self.enc_pos_embed is not None: 
+            x = x + self.enc_pos_embed[None,...]
         # apply masking 
         B,N,C = x.size()
         if do_mask:
             masks = self.mask_generator(x)
             x = x[~masks].view(B, -1, C)
+            posvis = pos[~masks].view(B, -1, 2)
         else:
             B,N,C = x.size()
             masks = torch.zeros((B,N), dtype=bool)
+            posvis = pos
         # now apply the transformer encoder and normalization        
         for blk in self.enc_blocks:        
-            x = blk(x)
+            x = blk(x, posvis)
         x = self.enc_norm(x)
-        return x, masks
+        return x, pos, masks
  
-    def _decoder(self, feat1, masks1, feat2):
+    def _decoder(self, feat1, pos1, masks1, feat2, pos2):
         # encoder to decoder layer 
         visf1 = self.decoder_embed(feat1)
         f2 = self.decoder_embed(feat2)
@@ -125,14 +155,15 @@ class CroCoNet(nn.Module):
         Ntotal = masks1.size(1)
         f1_ = self.mask_token.repeat(B, Ntotal, 1).to(dtype=visf1.dtype)
         f1_[~masks1] = visf1.view(B * Nenc, C)
-        # add positional embedding and image embedding
-        f1 = f1_ + self.dec_pos_embed
-        f2 = f2 + self.dec_pos_embed
+        # add positional embedding
+        if self.dec_pos_embed is not None:
+            f1_ = f1_ + self.dec_pos_embed
+            f2 = f2 + self.dec_pos_embed
         # apply Transformer blocks
-        out = f1 
+        out = f1_
         out2 = f2 
         for blk in self.dec_blocks:
-            out, out2 = blk(out, out2)
+            out, out2 = blk(out, out2, pos1, pos2)
         out = self.dec_norm(out)
         return out
 
@@ -173,11 +204,11 @@ class CroCoNet(nn.Module):
         masks are also returned as B x N just in case 
         """
         # encoder of the masked first image 
-        feat1, mask1 = self._encode_image(img1, do_mask=True)
+        feat1, pos1, mask1 = self._encode_image(img1, do_mask=True)
         # encoder of the second image 
-        feat2, _ = self._encode_image(img2, do_mask=False)
+        feat2, pos2, _ = self._encode_image(img2, do_mask=False)
         # decoder 
-        decfeat = self._decoder(feat1, mask1, feat2)
+        decfeat = self._decoder(feat1, pos1, mask1, feat2, pos2)
         # prediction head 
         out = self.prediction_head(decfeat)
         # get target
