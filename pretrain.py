@@ -37,6 +37,7 @@ from datasets.pairs_dataset import PairsDataset
 def get_args_parser():
     parser = argparse.ArgumentParser('CroCo pre-training', add_help=False)
     # model and criterion
+    parser.add_argument('--model', default='CroCoNet()', type=str, help="string containing the model to build")
     parser.add_argument('--norm_pix_loss', default=1, choices=[0,1], help="apply per-patch mean/std normalization before applying the loss")
     # dataset 
     parser.add_argument('--dataset', default='habitat_release', type=str, help="training set")
@@ -71,7 +72,9 @@ def get_args_parser():
         
 def main(args):
     misc.init_distributed_mode(args)
-
+    global_rank = misc.get_rank()
+    world_size = misc.get_world_size()
+    
     print("output_dir: "+args.output_dir)
     if args.output_dir:
         Path(args.output_dir).mkdir(parents=True, exist_ok=True)                         
@@ -93,13 +96,6 @@ def main(args):
 
     cudnn.benchmark = True
 
-    if args.distributed:
-        global_rank = misc.get_rank()
-        world_size = misc.get_world_size()
-    else:
-        global_rank = 0
-        world_size = 1
-   
     ## training dataset and loader 
     print('Building dataset for {:s} with transforms {:s}'.format(args.dataset, args.transforms))
     dataset = PairsDataset(args.dataset, trfs=args.transforms, data_dir=args.data_dir)
@@ -119,8 +115,8 @@ def main(args):
     )
    
     ## model 
-    print('Loading model: CroCoNet()')
-    model = CroCoNet()
+    print('Loading model: {:s}'.format(args.model))
+    model = eval(args.model)
     print('Loading criterion: MaskedMSE(norm_pix_loss={:s})'.format(str(bool(args.norm_pix_loss))))
     criterion = MaskedMSE(norm_pix_loss=bool(args.norm_pix_loss))
    

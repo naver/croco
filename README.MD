@@ -14,11 +14,11 @@ This repository contains the code for our CroCo model presented in our NeurIPS'2
   year={2022}
 }
 
-@article{croco_v2,
-  title={Improved Cross-view Completion Pre-training for Stereo Matching and Optical Flow},
+@inproceedings{croco_v2,
+  title={{CroCo v2: Improved Cross-view Completion Pre-training for Stereo Matching and Optical Flow}},
   author={Weinzaepfel, Philippe and Lucas, Thomas and Leroy, Vincent and Cabon, Yohann and Arora, Vaibhav and Br{\'e}gier, Romain and Csurka, Gabriela and Antsfeld, Leonid and Chidlovskii, Boris and Revaud, J{\'e}r{\^o}me}, 
-  journal={arXiv preprint arXiv:2211.10408},
-  year={2022}
+  booktitle={ICCV},
+  year={2023}
 }
 ```
 
@@ -94,6 +94,8 @@ In this demo, you should be able to sample a random reference viewpoint from an 
 
 ## Pre-training 
 
+### CroCo 
+
 To pre-train CroCo, please first generate the pre-training data from the Habitat simulator, following the instructions in [datasets/habitat_sim/README.MD](datasets/habitat_sim/README.MD) and then run the following command:
 ```
 torchrun --nproc_per_node=4 pretrain.py --output_dir ./output/pretraining/
@@ -101,10 +103,20 @@ torchrun --nproc_per_node=4 pretrain.py --output_dir ./output/pretraining/
 
 Our CroCo pre-training was launched on a single server with 4 GPUs.
 It should take around 10 days with A100 or 15 days with V100 to do the 400 pre-training epochs, but decent performances are obtained earlier in training.
-Note that, while the code contains the same scaling rule of the learning rate as MAE, we did not experimented if it is valid in our case.
+Note that, while the code contains the same scaling rule of the learning rate as MAE when changing the effective batch size, we did not experimented if it is valid in our case.
 The first run can take a few minutes to start, to parse all available pre-training pairs.
 
-For CroCo v2 pre-training, code will be available soon.
+### CroCo v2 
+
+For CroCo v2 pre-training, in addition to the generation of the pre-training data from the Habitat simulator above, please pre-extract the crops from the real datasets following the instructions in [datasets/crops/README.MD](datasets/crops/README.MD).
+Then, run the following command for the largest model (ViT-L encoder, Base decoder):
+```
+torchrun --nproc_per_node=8 pretrain.py --model "CroCoNet(enc_embed_dim=1024, enc_depth=24, enc_num_heads=16, dec_embed_dim=768, dec_num_heads=12, dec_depth=12, pos_embed='RoPE100')" --dataset "habitat_release+ARKitScenes+MegaDepth+3DStreetView+IndoorVL" --warmup_epochs 12 --max_epoch 125 --epochs 250 --amp 0 --keep_freq 5 --output_dir ./output/pretraining_crocov2/
+```
+
+Our CroCo v2 pre-training was launched on a single server with 8 GPUs for the largest model, and on a single server with 4 GPUs for the smaller ones, keeping a batch size of 64 per gpu in all cases.
+The largest model should take around 12 days on A100.
+Note that, while the code contains the same scaling rule of the learning rate as MAE when changing the effective batch size, we did not experimented if it is valid in our case.
 
 ## Stereo matching and Optical flow downstream tasks
 

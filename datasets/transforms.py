@@ -72,6 +72,8 @@ def get_pair_transforms(transform_str, totensor=True, normalize=True):
             trfs.append(RandomCropPair(size))
         elif s=='acolor':
             trfs.append(ColorJitterPair(assymetric_prob=1.0, brightness=(0.6, 1.4), contrast=(0.6, 1.4), saturation=(0.6, 1.4), hue=0.0))
+        elif s=='': # if transform_str was ""
+            pass
         else:
             raise NotImplementedError('Unknown augmentation: '+s)
             
