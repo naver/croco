@@ -26,6 +26,7 @@ This repository contains the code for our CroCo model presented in our NeurIPS'2
 
 The code is distributed under the CC BY-NC-SA 4.0 License. See [LICENSE](LICENSE) for more information.
 Some components are based on code from [MAE](https://github.com/facebookresearch/mae) released under the CC BY-NC-SA 4.0 License and [timm](https://github.com/rwightman/pytorch-image-models) released under the Apache 2.0 License.
+Some components for stereo matching and optical flow are based on code from [unimatch](https://github.com/autonomousvision/unimatch) released under the MIT license.
 
 ## Preparation
 
@@ -120,4 +121,4 @@ Note that, while the code contains the same scaling rule of the learning rate as
 
 ## Stereo matching and Optical flow downstream tasks
 
-Code and models for CroCo-Stereo and CroCo-Flow will be available soon.
+For CroCo-Stereo and CroCo-Flow, please refer to [stereoflow/README.MD](stereoflow/README.MD).

@@ -64,6 +64,8 @@ class CroCoNet(nn.Module):
             raise NotImplementedError('Unknown pos_embed '+pos_embed)
 
         # transformer for the encoder 
+        self.enc_depth = enc_depth
+        self.enc_embed_dim = enc_embed_dim
         self.enc_blocks = nn.ModuleList([
             Block(enc_embed_dim, enc_num_heads, mlp_ratio, qkv_bias=True, norm_layer=norm_layer, rope=self.rope)
             for i in range(enc_depth)])
@@ -88,6 +90,8 @@ class CroCoNet(nn.Module):
         self.mask_token = nn.Parameter(torch.zeros(1, 1, dec_embed_dim))
         
     def _set_decoder(self, enc_embed_dim, dec_embed_dim, dec_num_heads, dec_depth, mlp_ratio, norm_layer, norm_im2_in_dec):
+        self.dec_depth = dec_depth
+        self.dec_embed_dim = dec_embed_dim
         # transfer from encoder to decoder 
         self.decoder_embed = nn.Linear(enc_embed_dim, dec_embed_dim, bias=True)
         # transformer for the decoder 
@@ -105,7 +109,7 @@ class CroCoNet(nn.Module):
         # patch embed 
         self.patch_embed._init_weights()
         # mask tokens
-        torch.nn.init.normal_(self.mask_token, std=.02)
+        if self.mask_token is not None: torch.nn.init.normal_(self.mask_token, std=.02)
         # linears and layer norms
         self.apply(self._init_weights)
 
@@ -119,10 +123,12 @@ class CroCoNet(nn.Module):
             nn.init.constant_(m.bias, 0)
             nn.init.constant_(m.weight, 1.0)
             
-    def _encode_image(self, image, do_mask=False):
+    def _encode_image(self, image, do_mask=False, return_all_blocks=False):
         """
         image has B x 3 x img_size x img_size 
-        masking: whether to perform masking or not
+        do_mask: whether to perform masking or not
+        return_all_blocks: if True, return the features at the end of every block 
+                           instead of just the features from the last block (eg for some prediction heads)
         """
         # embed the image into patches  (x has size B x Npatches x C) 
         # and get position if each return patch (pos has size B x Npatches x 2)
@@ -141,20 +147,37 @@ class CroCoNet(nn.Module):
             masks = torch.zeros((B,N), dtype=bool)
             posvis = pos
         # now apply the transformer encoder and normalization        
-        for blk in self.enc_blocks:        
-            x = blk(x, posvis)
-        x = self.enc_norm(x)
-        return x, pos, masks
+        if return_all_blocks:
+            out = []
+            for blk in self.enc_blocks:
+                x = blk(x, posvis)
+                out.append(x)
+            out[-1] = self.enc_norm(out[-1])
+            return out, pos, masks
+        else:
+            for blk in self.enc_blocks:
+                x = blk(x, posvis)
+            x = self.enc_norm(x)
+            return x, pos, masks
  
-    def _decoder(self, feat1, pos1, masks1, feat2, pos2):
+    def _decoder(self, feat1, pos1, masks1, feat2, pos2, return_all_blocks=False):
+        """
+        return_all_blocks: if True, return the features at the end of every block 
+                           instead of just the features from the last block (eg for some prediction heads)
+                           
+        masks1 can be None => assume image1 fully visible 
+        """
         # encoder to decoder layer 
         visf1 = self.decoder_embed(feat1)
         f2 = self.decoder_embed(feat2)
         # append masked tokens to the sequence
         B,Nenc,C = visf1.size()
-        Ntotal = masks1.size(1)
-        f1_ = self.mask_token.repeat(B, Ntotal, 1).to(dtype=visf1.dtype)
-        f1_[~masks1] = visf1.view(B * Nenc, C)
+        if masks1 is None: # downstreams
+            f1_ = visf1
+        else: # pretraining 
+            Ntotal = masks1.size(1)
+            f1_ = self.mask_token.repeat(B, Ntotal, 1).to(dtype=visf1.dtype)
+            f1_[~masks1] = visf1.view(B * Nenc, C)
         # add positional embedding
         if self.dec_pos_embed is not None:
             f1_ = f1_ + self.dec_pos_embed
@@ -162,9 +185,16 @@ class CroCoNet(nn.Module):
         # apply Transformer blocks
         out = f1_
         out2 = f2 
-        for blk in self.dec_blocks:
-            out, out2 = blk(out, out2, pos1, pos2)
-        out = self.dec_norm(out)
+        if return_all_blocks:
+            _out, out = out, []
+            for blk in self.dec_blocks:
+                _out, out2 = blk(_out, out2, pos1, pos2)
+                out.append(_out)
+            out[-1] = self.dec_norm(out[-1])
+        else:
+            for blk in self.dec_blocks:
+                out, out2 = blk(out, out2, pos1, pos2)
+            out = self.dec_norm(out)
         return out
 
     def patchify(self, imgs):

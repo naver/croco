@@ -123,7 +123,7 @@ class MetricLogger(object):
     def add_meter(self, name, meter):
         self.meters[name] = meter
 
-    def log_every(self, iterable, print_freq, header=None):
+    def log_every(self, iterable, print_freq, header=None, max_iter=None):
         i = 0
         if not header:
             header = ''
@@ -131,7 +131,8 @@ class MetricLogger(object):
         end = time.time()
         iter_time = SmoothedValue(fmt='{avg:.4f}')
         data_time = SmoothedValue(fmt='{avg:.4f}')
-        space_fmt = ':' + str(len(str(len(iterable)))) + 'd'
+        len_iterable = min(len(iterable), max_iter) if max_iter else len(iterable)
+        space_fmt = ':' + str(len(str(len_iterable))) + 'd'
         log_msg = [
             header,
             '[{0' + space_fmt + '}/{1}]',
@@ -144,30 +145,32 @@ class MetricLogger(object):
             log_msg.append('max mem: {memory:.0f}')
         log_msg = self.delimiter.join(log_msg)
         MB = 1024.0 * 1024.0
-        for obj in iterable:
+        for it,obj in enumerate(iterable):
             data_time.update(time.time() - end)
             yield obj
             iter_time.update(time.time() - end)
-            if i % print_freq == 0 or i == len(iterable) - 1:
-                eta_seconds = iter_time.global_avg * (len(iterable) - i)
+            if i % print_freq == 0 or i == len_iterable - 1:
+                eta_seconds = iter_time.global_avg * (len_iterable - i)
                 eta_string = str(datetime.timedelta(seconds=int(eta_seconds)))
                 if torch.cuda.is_available():
                     print(log_msg.format(
-                        i, len(iterable), eta=eta_string,
+                        i, len_iterable, eta=eta_string,
                         meters=str(self),
                         time=str(iter_time), data=str(data_time),
                         memory=torch.cuda.max_memory_allocated() / MB))
                 else:
                     print(log_msg.format(
-                        i, len(iterable), eta=eta_string,
+                        i, len_iterable, eta=eta_string,
                         meters=str(self),
                         time=str(iter_time), data=str(data_time)))
             i += 1
             end = time.time()
+            if max_iter and it >= max_iter:
+                break
         total_time = time.time() - start_time
         total_time_str = str(datetime.timedelta(seconds=int(total_time)))
         print('{} Total time: {} ({:.4f} s / it)'.format(
-            header, total_time_str, total_time / len(iterable)))
+            header, total_time_str, total_time / len_iterable))
 
 
 def setup_for_distributed(is_master):
@@ -286,7 +289,7 @@ def get_grad_norm_(parameters, norm_type: float = 2.0) -> torch.Tensor:
 
 
 
-def save_model(args, epoch, model_without_ddp, optimizer, loss_scaler, fname=None):
+def save_model(args, epoch, model_without_ddp, optimizer, loss_scaler, fname=None, best_so_far=None):
     output_dir = Path(args.output_dir)
     if fname is None: fname = str(epoch)
     checkpoint_path = output_dir / ('checkpoint-%s.pth' % fname)
@@ -297,12 +300,14 @@ def save_model(args, epoch, model_without_ddp, optimizer, loss_scaler, fname=Non
         'args': args,
         'epoch': epoch,
     }
+    if best_so_far is not None: to_save['best_so_far'] = best_so_far
     print(f'>> Saving model to {checkpoint_path} ...')
     save_on_master(to_save, checkpoint_path)
 
 
 def load_model(args, model_without_ddp, optimizer, loss_scaler):
     args.start_epoch = 0
+    best_so_far = None
     if args.resume is not None:
         if args.resume.startswith('https'):
             checkpoint = torch.hub.load_state_dict_from_url(
@@ -315,8 +320,13 @@ def load_model(args, model_without_ddp, optimizer, loss_scaler):
         optimizer.load_state_dict(checkpoint['optimizer'])
         if 'scaler' in checkpoint:
             loss_scaler.load_state_dict(checkpoint['scaler'])
+        if 'best_so_far' in checkpoint:
+            best_so_far = checkpoint['best_so_far']
+            print(" & best_so_far={:g}".format(best_so_far))
+        else:
+            print("")
         print("With optim & sched! start_epoch={:d}".format(args.start_epoch), end='')
-        
+    return best_so_far
 
 def all_reduce_mean(x):
     world_size = get_world_size()
@@ -327,6 +337,33 @@ def all_reduce_mean(x):
         return x_reduce.item()
     else:
         return x
+
+def _replace(text, src, tgt, rm=''):
+    """ Advanced string replacement.
+    Given a text:
+    - replace all elements in src by the corresponding element in tgt
+    - remove all elements in rm
+    """
+    if len(tgt) == 1: 
+        tgt = tgt * len(src)
+    assert len(src) == len(tgt), f"'{src}' and '{tgt}' should have the same len"
+    for s,t in zip(src, tgt):
+        text = text.replace(s,t)
+    for c in rm:
+        text = text.replace(c,'')
+    return text
+    
+def filename( obj ):
+    """ transform a python obj or cmd into a proper filename. 
+     - \1 gets replaced by slash '/'
+     - \2 gets replaced by comma ','
+    """
+    if not isinstance(obj, str): 
+        obj = repr(obj)
+    obj = str(obj).replace('()','')
+    obj = _replace(obj, '_,(*/\1\2','-__x%/,', rm=' )\'"')
+    assert all(len(s) < 256 for s in obj.split(os.sep)), 'filename too long (>256 characters):\n'+obj
+    return obj
 
 def _get_num_layer_for_vit(var_name, enc_depth, dec_depth):
     if var_name in ("cls_token", "mask_token", "pos_embed", "global_tokens"):
