@@ -272,6 +272,7 @@ class DPTOutputAdapter(nn.Module):
     :param hooks: Index of intermediate layers
     :param layer_dims: Dimension of intermediate layers
     :param feature_dim: Feature dimension
+    :param last_dim: out_channels/in_channels for the last two Conv2d when head_type == regression
     :param use_bn: If set to True, activates batch norm
     :param dim_tokens_enc:  Dimension of tokens coming from encoder
     """
@@ -284,6 +285,7 @@ class DPTOutputAdapter(nn.Module):
                  hooks: List[int] = [2, 5, 8, 11],
                  layer_dims: List[int] = [96, 192, 384, 768],
                  feature_dim: int = 256,
+                 last_dim: int = 32,
                  use_bn: bool = False,
                  dim_tokens_enc: Optional[int] = None,
                  head_type: str = 'regression',
@@ -316,9 +318,9 @@ class DPTOutputAdapter(nn.Module):
             self.head = nn.Sequential(
                 nn.Conv2d(feature_dim, feature_dim // 2, kernel_size=3, stride=1, padding=1),
                 Interpolate(scale_factor=2, mode="bilinear", align_corners=True),
-                nn.Conv2d(feature_dim // 2, 32, kernel_size=3, stride=1, padding=1),
+                nn.Conv2d(feature_dim // 2, last_dim, kernel_size=3, stride=1, padding=1),
                 nn.ReLU(True),
-                nn.Conv2d(32, self.num_channels, kernel_size=1, stride=1, padding=0)
+                nn.Conv2d(last_dim, self.num_channels, kernel_size=1, stride=1, padding=0)
             )
         elif self.head_type == 'semseg':
             # The "DPTSegmentationModel" head

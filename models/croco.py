@@ -39,7 +39,7 @@ class CroCoNet(nn.Module):
         super(CroCoNet, self).__init__()
                 
         # patch embeddings  (with initialization done as in MAE)
-        self.patch_embed = PatchEmbed(img_size, patch_size, 3, enc_embed_dim)
+        self._set_patch_embed(img_size, patch_size, enc_embed_dim)
 
         # mask generations
         self._set_mask_generator(self.patch_embed.num_patches, mask_ratio)
@@ -82,7 +82,10 @@ class CroCoNet(nn.Module):
         
         # initializer weights
         self.initialize_weights()           
-        
+
+    def _set_patch_embed(self, img_size=224, patch_size=16, enc_embed_dim=768):
+        self.patch_embed = PatchEmbed(img_size, patch_size, 3, enc_embed_dim)
+
     def _set_mask_generator(self, num_patches, mask_ratio):
         self.mask_generator = RandomMask(num_patches, mask_ratio)
         
