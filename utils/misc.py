@@ -22,7 +22,7 @@ import numpy as np
 
 import torch
 import torch.distributed as dist
-from torch._six import inf
+from torch import inf
 
 class SmoothedValue(object):
     """Track a series of values and provide access to smoothed values over a
