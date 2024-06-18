@@ -5,6 +5,8 @@
 # CroCo model for downstream tasks
 # --------------------------------------------------------
 
+import torch
+
 from .croco import CroCoNet
 
 
@@ -88,13 +90,30 @@ class CroCoDownstreamBinocular(CroCoNet):
     def _set_prediction_head(self, *args, **kwargs):
         """ No prediction head for downstream tasks, define your own head """
         return
+        
+    def encode_image_pairs(self, img1, img2, return_all_blocks=False):
+        """ run encoder for a pair of images
+            it is actually ~5% faster to concatenate the images along the batch dimension 
+             than to encode them separately
+        """
+        ## the two commented lines below is the naive version with separate encoding
+        #out, pos, _ = self._encode_image(img1, do_mask=False, return_all_blocks=return_all_blocks)
+        #out2, pos2, _ = self._encode_image(img2, do_mask=False, return_all_blocks=False)
+        ## and now the faster version
+        out, pos, _ = self._encode_image( torch.cat( (img1,img2), dim=0), do_mask=False, return_all_blocks=return_all_blocks )
+        if return_all_blocks:
+            out,out2 = list(map(list, zip(*[o.chunk(2, dim=0) for o in out])))
+            out2 = out2[-1]
+        else:
+            out,out2 = out.chunk(2, dim=0)
+        pos,pos2 = pos.chunk(2, dim=0)            
+        return out, out2, pos, pos2
 
     def forward(self, img1, img2):
         B, C, H, W = img1.size()
         img_info = {'height': H, 'width': W}
         return_all_blocks = hasattr(self.head, 'return_all_blocks') and self.head.return_all_blocks
-        out, pos, _ = self._encode_image(img1, do_mask=False, return_all_blocks=return_all_blocks)
-        out2, pos2, _ = self._encode_image(img2, do_mask=False, return_all_blocks=False)
+        out, out2, pos, pos2 = self.encode_image_pairs(img1, img2, return_all_blocks=return_all_blocks)
         if return_all_blocks:
             decout = self._decoder(out[-1], pos, None, out2, pos2, return_all_blocks=return_all_blocks)
             decout = out+decout
