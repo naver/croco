@@ -17,6 +17,13 @@
 import torch
 import torch.nn as nn 
 
+try:
+    from torch.nn.functional import scaled_dot_product_attention
+    torch_has_native_attention = True
+except ImportError as e:
+    torch_has_native_attention = False
+
+
 from itertools import repeat
 import collections.abc
 
@@ -101,12 +108,18 @@ class Attention(nn.Module):
         if self.rope is not None:
             q = self.rope(q, xpos)
             k = self.rope(k, xpos)
-               
-        attn = (q @ k.transpose(-2, -1)) * self.scale
-        attn = attn.softmax(dim=-1)
-        attn = self.attn_drop(attn)
-
-        x = (attn @ v).transpose(1, 2).reshape(B, N, C)
+        if not torch_has_native_attention:
+            attn = (q @ k.transpose(-2, -1)) * self.scale
+            attn = attn.softmax(dim=-1)
+            attn = self.attn_drop(attn)
+            x = (attn @ v).transpose(1, 2).reshape(B, N, C)
+        else:
+            # torch expects (batch, heads, len, dim)
+            x = scaled_dot_product_attention(
+                q,
+                k,
+                v,
+            ).transpose(1, 2).reshape(B, N, C)
         x = self.proj(x)
         x = self.proj_drop(x)
         return x
@@ -158,12 +171,19 @@ class CrossAttention(nn.Module):
         if self.rope is not None:
             q = self.rope(q, qpos)
             k = self.rope(k, kpos)
-            
-        attn = (q @ k.transpose(-2, -1)) * self.scale
-        attn = attn.softmax(dim=-1)
-        attn = self.attn_drop(attn)
-
-        x = (attn @ v).transpose(1, 2).reshape(B, Nq, C)
+        
+        if not torch_has_native_attention:
+            attn = (q @ k.transpose(-2, -1)) * self.scale
+            attn = attn.softmax(dim=-1)
+            attn = self.attn_drop(attn)
+            x = (attn @ v).transpose(1, 2).reshape(B, Nq, C)
+        else:
+            # torch expects (batch, heads, len, dim)
+            x = scaled_dot_product_attention(
+                q.permute(0,2,1,3),
+                k.permute(0,2,1,3),
+                v.permute(0,2,1,3),
+            ).permute(0,2,1,3).reshape(B, Nq, C)
         x = self.proj(x)
         x = self.proj_drop(x)
         return x
