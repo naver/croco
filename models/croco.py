@@ -47,10 +47,10 @@ class CroCoNet(nn.Module):
         self.pos_embed = pos_embed
         if pos_embed=='cosine':
             # positional embedding of the encoder 
-            enc_pos_embed = get_2d_sincos_pos_embed(enc_embed_dim, int(self.patch_embed.num_patches**.5), n_cls_token=0)
+            enc_pos_embed = get_2d_sincos_pos_embed(enc_embed_dim, self.patch_embed.grid_size, n_cls_token=0)
             self.register_buffer('enc_pos_embed', torch.from_numpy(enc_pos_embed).float())
             # positional embedding of the decoder  
-            dec_pos_embed = get_2d_sincos_pos_embed(dec_embed_dim, int(self.patch_embed.num_patches**.5), n_cls_token=0)
+            dec_pos_embed = get_2d_sincos_pos_embed(dec_embed_dim, self.patch_embed.grid_size, n_cls_token=0)
             self.register_buffer('dec_pos_embed', torch.from_numpy(dec_pos_embed).float())
             # pos embedding in each block
             self.rope = None # nothing for cosine 
