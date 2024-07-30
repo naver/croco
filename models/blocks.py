@@ -17,6 +17,13 @@
 import torch
 import torch.nn as nn 
 
+try:
+    from torch.nn.functional import scaled_dot_product_attention
+    torch_has_native_attention = True
+except ImportError as e:
+    torch_has_native_attention = False
+
+
 from itertools import repeat
 import collections.abc
 
@@ -101,12 +108,18 @@ class Attention(nn.Module):
         if self.rope is not None:
             q = self.rope(q, xpos)
             k = self.rope(k, xpos)
-               
-        attn = (q @ k.transpose(-2, -1)) * self.scale
-        attn = attn.softmax(dim=-1)
-        attn = self.attn_drop(attn)
-
-        x = (attn @ v).transpose(1, 2).reshape(B, N, C)
+        if not torch_has_native_attention:
+            attn = (q @ k.transpose(-2, -1)) * self.scale
+            attn = attn.softmax(dim=-1)
+            attn = self.attn_drop(attn)
+            x = (attn @ v).transpose(1, 2).reshape(B, N, C)
+        else:
+            # torch expects (batch, heads, len, dim)
+            x = scaled_dot_product_attention(
+                q,
+                k,
+                v,
+            ).transpose(1, 2).reshape(B, N, C)
         x = self.proj(x)
         x = self.proj_drop(x)
         return x
@@ -158,12 +171,18 @@ class CrossAttention(nn.Module):
         if self.rope is not None:
             q = self.rope(q, qpos)
             k = self.rope(k, kpos)
-            
-        attn = (q @ k.transpose(-2, -1)) * self.scale
-        attn = attn.softmax(dim=-1)
-        attn = self.attn_drop(attn)
-
-        x = (attn @ v).transpose(1, 2).reshape(B, Nq, C)
+        
+        if not torch_has_native_attention:
+            attn = (q @ k.transpose(-2, -1)) * self.scale
+            attn = attn.softmax(dim=-1)
+            attn = self.attn_drop(attn)
+            x = (attn @ v).transpose(1, 2).reshape(B, Nq, C)
+        else:
+            x = scaled_dot_product_attention(
+                q,
+                k,
+                v,
+            ).transpose(1,2).reshape(B, Nq, C)
         x = self.proj(x)
         x = self.proj_drop(x)
         return x
@@ -183,12 +202,31 @@ class DecoderBlock(nn.Module):
         self.mlp = Mlp(in_features=dim, hidden_features=mlp_hidden_dim, act_layer=act_layer, drop=drop)
         self.norm_y = norm_layer(dim) if norm_mem else nn.Identity()
 
-    def forward(self, x, y, xpos, ypos):
+    def forward_one_to_one(self, x, y, xpos, ypos):
         x = x + self.drop_path(self.attn(self.norm1(x), xpos))
         y_ = self.norm_y(y)
         x = x + self.drop_path(self.cross_attn(self.norm2(x), y_, y_, xpos, ypos))
         x = x + self.drop_path(self.mlp(self.norm3(x)))
         return x, y
+
+    def forward_many_to_one(self, xs, y, xposs, ypos):
+        xs = [self.forward_one_to_one(xs[i],y,xposs[i],ypos)[0] for i in range(len(xs))]
+        return xs, y
+
+    def forward_one_to_many(self, x, ys, xpos, yposs):
+        xs = [self.forward_one_to_one(x,ys[i],xpos,yposs[i])[0] for i in range(len(ys))]
+        # try naive reduction with mean
+        x = torch.stack(xs).mean(dim=0)
+        return x, ys
+    
+    def forward(self, x_or_xs, y_or_ys, xpos_or_xposs, ypos_or_yposs):
+        if isinstance(x_or_xs, list):
+            return self.forward_many_to_one(x_or_xs, y_or_ys, xpos_or_xposs, ypos_or_yposs)
+        elif isinstance(y_or_ys, list):
+            return self.forward_one_to_many(x_or_xs, y_or_ys, xpos_or_xposs, ypos_or_yposs)
+        else:
+            return self.forward_one_to_one(x_or_xs, y_or_ys, xpos_or_xposs, ypos_or_yposs)
+
         
         
 # patch embedding
