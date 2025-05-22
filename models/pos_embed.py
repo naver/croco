@@ -117,7 +117,7 @@ except ImportError:
 
         def get_cos_sin(self, D, seq_len, device, dtype):
             if (D,seq_len,device,dtype) not in self.cache:
-                inv_freq = 1.0 / (self.base ** (torch.arange(0, D, 2).float().to(device) / D))
+                inv_freq = self.F0 / (self.base ** (torch.arange(0, D, 2).float().to(device) / D))
                 t = torch.arange(seq_len, device=device, dtype=inv_freq.dtype)
                 freqs = torch.einsum("i,j->ij", t, inv_freq).to(dtype)
                 freqs = torch.cat((freqs, freqs), dim=-1)
