@@ -55,11 +55,11 @@ Generate image pairs from metadata:
 ```bash
 # Target output directory
 PAIRS_DATASET_DIR="./data/habitat_release/"
-python datasets/habitat_sim/generate_from_metadata_files.py --input_dir=$METADATA_DIR --output_dir=$PAIRS_DATASET_DIR
+python tools/habitat_sim/generate_from_metadata_files.py --input_dir=$METADATA_DIR --output_dir=$PAIRS_DATASET_DIR
 ```
 - One can launch multiple of such commands in parallel e.g. using GNU Parallel:
 ```bash
-python datasets/habitat_sim/generate_from_metadata_files.py --input_dir=$METADATA_DIR --output_dir=$PAIRS_DATASET_DIR | parallel -j 16
+python tools/habitat_sim/generate_from_metadata_files.py --input_dir=$METADATA_DIR --output_dir=$PAIRS_DATASET_DIR | parallel -j 16
 ```
 
 ## Metadata generation
@@ -68,9 +68,9 @@ Image pairs were randomly sampled using the following commands, whose outputs co
 ```bash
 # Print commandlines to generate image pairs from the different scenes available.
 PAIRS_DATASET_DIR=MY_CUSTOM_PATH
-python datasets/habitat_sim/generate_multiview_images.py --list_commands --output_dir=$PAIRS_DATASET_DIR
+python tools/habitat_sim/generate_multiview_images.py --list_commands --output_dir=$PAIRS_DATASET_DIR
 
 # Once a dataset is generated, pack metadata files for reproducibility.
 METADATA_DIR=MY_CUSTON_PATH
-python datasets/habitat_sim/pack_metadata_files.py $PAIRS_DATASET_DIR  $METADATA_DIR
+python tools/habitat_sim/pack_metadata_files.py $PAIRS_DATASET_DIR  $METADATA_DIR
 ```

@@ -7,11 +7,10 @@ import argparse
 import PIL.Image
 import numpy as np
 import json
-from datasets.habitat_sim.multiview_habitat_sim_generator import MultiviewHabitatSimGenerator, NoNaviguableSpaceError
-from datasets.habitat_sim.paths import list_scenes_available
 import cv2
-import quaternion
-import shutil
+import path_to_croco  # noqa
+from croco.datasets.habitat_sim.multiview_habitat_sim_generator import MultiviewHabitatSimGenerator, NoNaviguableSpaceError
+from croco.datasets.habitat_sim.paths import list_scenes_available
 
 def generate_multiview_images_for_scene(scene_dataset_config_file,
                                         scene,

@@ -5,14 +5,16 @@
 Script to generate image pairs for a given scene reproducing poses provided in a metadata file.
 """
 import os
-from datasets.habitat_sim.multiview_habitat_sim_generator import MultiviewHabitatSimGenerator
-from datasets.habitat_sim.paths import SCENES_DATASET
 import argparse
 import quaternion
 import PIL.Image
 import cv2
 import json
 from tqdm import tqdm
+
+import path_to_croco  # noqa
+from croco.datasets.habitat_sim.multiview_habitat_sim_generator import MultiviewHabitatSimGenerator
+from croco.datasets.habitat_sim.paths import SCENES_DATASET
 
 def generate_multiview_images_from_metadata(metadata_filename,
                                             output_dir,

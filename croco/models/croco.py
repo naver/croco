@@ -6,16 +6,14 @@
 # CroCo model during pretraining
 # --------------------------------------------------------
 
-
-
 import torch
 import torch.nn as nn
 torch.backends.cuda.matmul.allow_tf32 = True # for gpu >= Ampere and pytorch >= 1.12
 from functools import partial
 
-from models.blocks import Block, DecoderBlock, PatchEmbed
-from models.pos_embed import get_2d_sincos_pos_embed, RoPE2D 
-from models.masking import RandomMask
+from croco.models.blocks import Block, DecoderBlock, PatchEmbed
+from croco.models.pos_embed import get_2d_sincos_pos_embed, RoPE2D 
+from croco.models.masking import RandomMask
 
 
 class CroCoNet(nn.Module):

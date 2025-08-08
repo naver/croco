@@ -21,17 +21,17 @@ import torchvision.transforms as transforms
 import torchvision.datasets as datasets
 from torch.utils.data import DataLoader
 
-import utils
-import utils.misc as misc
-from utils.misc import NativeScalerWithGradNormCount as NativeScaler
-from models.croco_downstream import CroCoDownstreamBinocular, croco_args_from_ckpt
-from models.pos_embed import interpolate_pos_embed
-from models.head_downstream import PixelwiseTaskWithDPT
+import path_to_croco  # noqa
+import croco.utils.misc as misc
+from croco.utils.misc import NativeScalerWithGradNormCount as NativeScaler
+from croco.models.croco_downstream import CroCoDownstreamBinocular, croco_args_from_ckpt
+from croco.models.pos_embed import interpolate_pos_embed
+from croco.models.head_downstream import PixelwiseTaskWithDPT
 
-from stereoflow.datasets_stereo import get_train_dataset_stereo, get_test_datasets_stereo
-from stereoflow.datasets_flow import get_train_dataset_flow, get_test_datasets_flow
-from stereoflow.engine import train_one_epoch, validate_one_epoch
-from stereoflow.criterion import *
+from croco.stereoflow.datasets_stereo import get_train_dataset_stereo, get_test_datasets_stereo
+from croco.stereoflow.datasets_flow import get_train_dataset_flow, get_test_datasets_flow
+from croco.stereoflow.engine import train_one_epoch, validate_one_epoch
+from croco.stereoflow.criterion import *
 
 
 def get_args_parser():

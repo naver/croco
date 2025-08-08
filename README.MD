@@ -47,12 +47,12 @@ conda install scikit-learn tqdm quaternion opencv # only for pretraining / habit
 
 CroCo v2 relies on RoPE positional embeddings for which you need to compile some cuda kernels.
 ```bash
-cd models/curope/
-python setup.py build_ext --inplace
-cd ../../
+cd curope/
+pip install .
+cd ../
 ```
 
-This can be a bit long as we compile for all cuda architectures, feel free to update L9 of `models/curope/setup.py` to compile for specific architectures only.
+This can be a bit long as we compile for all cuda architectures, feel free to update L9 of `curope/setup.py` to compile for specific architectures only.
 You might also need to set the environment `CUDA_HOME` in case you use a custom cuda installation.
 
 In case you cannot provide, we also provide a slow pytorch version, which will be automatically loaded.
@@ -97,7 +97,7 @@ In this demo, you should be able to sample a random reference viewpoint from an 
 
 ### CroCo 
 
-To pre-train CroCo, please first generate the pre-training data from the Habitat simulator, following the instructions in [datasets/habitat_sim/README.MD](datasets/habitat_sim/README.MD) and then run the following command:
+To pre-train CroCo, please first generate the pre-training data from the Habitat simulator, following the instructions in [tools/habitat_sim/README.MD](tools/habitat_sim/README.MD) and then run the following command:
 ```
 torchrun --nproc_per_node=4 pretrain.py --output_dir ./output/pretraining/
 ```
@@ -109,7 +109,7 @@ The first run can take a few minutes to start, to parse all available pre-traini
 
 ### CroCo v2 
 
-For CroCo v2 pre-training, in addition to the generation of the pre-training data from the Habitat simulator above, please pre-extract the crops from the real datasets following the instructions in [datasets/crops/README.MD](datasets/crops/README.MD).
+For CroCo v2 pre-training, in addition to the generation of the pre-training data from the Habitat simulator above, please pre-extract the crops from the real datasets following the instructions in [tools/crops/README.MD](tools/crops/README.MD).
 Then, run the following command for the largest model (ViT-L encoder, Base decoder):
 ```
 torchrun --nproc_per_node=8 pretrain.py --model "CroCoNet(enc_embed_dim=1024, enc_depth=24, enc_num_heads=16, dec_embed_dim=768, dec_num_heads=12, dec_depth=12, pos_embed='RoPE100')" --dataset "habitat_release+ARKitScenes+MegaDepth+3DStreetView+IndoorVL" --warmup_epochs 12 --max_epoch 125 --epochs 250 --amp 0 --keep_freq 5 --output_dir ./output/pretraining_crocov2/
@@ -121,4 +121,4 @@ Note that, while the code contains the same scaling rule of the learning rate as
 
 ## Stereo matching and Optical flow downstream tasks
 
-For CroCo-Stereo and CroCo-Flow, please refer to [stereoflow/README.MD](stereoflow/README.MD).
+For CroCo-Stereo and CroCo-Flow, please refer to [tools/stereoflow/README.MD](tools/stereoflow/README.MD).

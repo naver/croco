@@ -1,17 +1,19 @@
 # Copyright (C) 2022-present Naver Corporation. All rights reserved.
 # Licensed under CC BY-NC-SA 4.0 (non-commercial use only).
 
-import os
 import numpy as np
 import quaternion
-import habitat_sim
-import json
 from sklearn.neighbors import NearestNeighbors
-import cv2
+
+try:
+    import habitat_sim
+    has_habitat_sim=True
+    R_OPENCV2HABITAT = np.stack((habitat_sim.geo.RIGHT, -habitat_sim.geo.UP, habitat_sim.geo.FRONT), axis=0)
+    R_HABITAT2OPENCV = R_OPENCV2HABITAT.T
+except Exception as e:
+    has_habitat_sim=False
 
 # OpenCV to habitat camera convention transformation
-R_OPENCV2HABITAT = np.stack((habitat_sim.geo.RIGHT, -habitat_sim.geo.UP, habitat_sim.geo.FRONT), axis=0)
-R_HABITAT2OPENCV = R_OPENCV2HABITAT.T
 DEG2RAD = np.pi / 180
 
 def compute_camera_intrinsics(height, width, hfov):
@@ -20,6 +22,7 @@ def compute_camera_intrinsics(height, width, hfov):
     return f, cu, cv
 
 def compute_camera_pose_opencv_convention(camera_position, camera_orientation):
+    assert has_habitat_sim
     R_cam2world = quaternion.as_rotation_matrix(camera_orientation) @ R_OPENCV2HABITAT
     t_cam2world = np.asarray(camera_position)
     return R_cam2world, t_cam2world
@@ -109,6 +112,7 @@ def look_at_for_habitat(eye, center, up, return_cam2world=True):
     return orientation, t
 
 def generate_orientation_noise(pan_range, tilt_range, roll_range):
+    assert has_habitat_sim
     return (quaternion.from_rotation_vector(np.random.uniform(*pan_range) * DEG2RAD * habitat_sim.geo.UP)
             * quaternion.from_rotation_vector(np.random.uniform(*tilt_range) * DEG2RAD * habitat_sim.geo.RIGHT)
             * quaternion.from_rotation_vector(np.random.uniform(*roll_range) * DEG2RAD * habitat_sim.geo.FRONT))
@@ -130,6 +134,7 @@ class MultiviewHabitatSimGenerator:
                 size = 10000,
                 minimum_covisibility = 0.5,
                 transform = None):
+        assert has_habitat_sim
         self.scene = scene
         self.navmesh = navmesh
         self.scene_dataset_config_file = scene_dataset_config_file

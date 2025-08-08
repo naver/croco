@@ -6,11 +6,12 @@ Utility script to pack metadata files of the dataset in order to be able to re-g
 import os
 import glob
 from tqdm import tqdm
-import shutil
 import json
-from datasets.habitat_sim.paths import *
 import argparse
 import collections
+import path_to_croco  # noqa
+from croco.datasets.habitat_sim.paths import *
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()

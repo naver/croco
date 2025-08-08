@@ -5,7 +5,7 @@ import os
 from torch.utils.data import Dataset
 from PIL import Image
 
-from datasets.transforms import get_pair_transforms
+from croco.datasets.transforms import get_pair_transforms
 
 def load_image(impath):
     return Image.open(impath)
