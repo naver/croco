@@ -14,6 +14,7 @@ import sys
 import time
 
 import torch
+torch.backends.cuda.matmul.allow_tf32 = True # for gpu >= Ampere and pytorch >= 1.12
 import torch.distributed as dist
 import torch.backends.cudnn as cudnn
 from torch.utils.tensorboard import SummaryWriter

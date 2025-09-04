@@ -13,6 +13,7 @@ import numpy as np
 from tqdm import tqdm
 
 import torch
+torch.backends.cuda.matmul.allow_tf32 = True # for gpu >= Ampere and pytorch >= 1.12
 from torch.utils.data import DataLoader
 
 import path_to_croco  # noqa

@@ -2,6 +2,7 @@
 # Licensed under CC BY-NC-SA 4.0 (non-commercial use only).
 
 import torch
+torch.backends.cuda.matmul.allow_tf32 = True # for gpu >= Ampere and pytorch >= 1.12
 from croco.models.croco import CroCoNet
 from PIL import Image
 import torchvision.transforms
