@@ -20,7 +20,7 @@ setup(
     include_package_data=True,
     ext_modules = [
         CUDAExtension(
-                name='curope',
+                name='curope.cuda_rope',
                 sources=[
                     "curope.cpp",
                     "kernels.cu",

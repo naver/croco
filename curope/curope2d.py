@@ -2,11 +2,7 @@
 # Licensed under CC BY-NC-SA 4.0 (non-commercial use only).
 
 import torch
-
-try:
-    import curope as _kernels # run `python setup.py install`
-except ModuleNotFoundError:
-    from . import curope as _kernels # run `python setup.py build_ext --inplace`
+from . import cuda_rope as _kernels
 
 
 class cuRoPE2D_func (torch.autograd.Function):
