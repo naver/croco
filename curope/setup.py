@@ -1,6 +1,5 @@
 # Copyright (C) 2022-present Naver Corporation. All rights reserved.
 # Licensed under CC BY-NC-SA 4.0 (non-commercial use only).
-
 from setuptools import setup
 from torch import cuda
 from torch.utils.cpp_extension import BuildExtension, CUDAExtension
@@ -16,7 +15,9 @@ all_cuda_archs = cuda.get_gencode_flags().replace('compute=','arch=').split()
 # ]
 
 setup(
-    name = 'curope',
+    packages=['curope'],
+    package_dir={'curope': "."}, 
+    include_package_data=True,
     ext_modules = [
         CUDAExtension(
                 name='curope',
