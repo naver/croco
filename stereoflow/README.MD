@@ -316,3 +316,14 @@ python -u stereoflow/train.py flow --criterion "LaplacianLossBounded()" --datase
 	<summary>Smaller models</summary>
 	To train CroCo-Flow with smaller CroCo pretrained models, simply replace the <code>--pretrained</code> argument. To download the smaller CroCo-Flow models based on CroCo v2 pretraining with ViT-Base encoder and Small encoder, use <code>bash stereoflow/download_model.sh crocoflow_vitb_smalldecoder.pth</code>, and for the model with a ViT-Base encoder and a Base decoder, use <code>bash stereoflow/download_model.sh crocoflow_vitb_basedecoder.pth</code>.
 </details>
+
+### Export ONNX 
+
+For deployment, we provide the ONNX exporting script. 
+
+```
+# Download the model 
+bash stereoflow/download_model.sh crocostereo.pth
+# Export ONNX 
+python stereoflow/export.py --model stereoflow_models/crocostereo.pth
+```

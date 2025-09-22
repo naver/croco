@@ -1,0 +1,9 @@
+Pillow
+torch
+torchvision
+numpy
+onnx
+tqdm
+torchviz
+einops
+onnxscript

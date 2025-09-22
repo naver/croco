@@ -41,6 +41,12 @@ def drop_path(x, drop_prob: float = 0., training: bool = False, scale_by_keep: b
         random_tensor.div_(keep_prob)
     return x * random_tensor
 
+# Because the current ONNX opset doesn't support cartesian_prod operator from torch.cartesian_prod(), 
+# implement cartesian_prod natively
+def cartesian_prod(*tensors):
+    grids = torch.meshgrid(*tensors, indexing="ij")
+    return torch.stack(grids, dim=-1).reshape(-1, len(tensors))
+
 class DropPath(nn.Module):
     """Drop paths (Stochastic Depth) per sample  (when applied in main path of residual blocks).
     """
@@ -202,7 +208,7 @@ class PositionGetter(object):
         if not (h,w) in self.cache_positions:
             x = torch.arange(w, device=device)
             y = torch.arange(h, device=device)
-            self.cache_positions[h,w] = torch.cartesian_prod(y, x) # (h, w, 2)
+            self.cache_positions[h, w] = cartesian_prod(y, x)
         pos = self.cache_positions[h,w].view(1, h*w, 2).expand(b, -1, 2).clone()
         return pos
 
