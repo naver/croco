@@ -96,17 +96,12 @@ class CroCoDownstreamBinocular(CroCoNet):
             it is actually ~5% faster to concatenate the images along the batch dimension 
              than to encode them separately
         """
-        ## the two commented lines below is the naive version with separate encoding
-        #out, pos, _ = self._encode_image(img1, do_mask=False, return_all_blocks=return_all_blocks)
-        #out2, pos2, _ = self._encode_image(img2, do_mask=False, return_all_blocks=False)
-        ## and now the faster version
-        out, pos, _ = self._encode_image( torch.cat( (img1,img2), dim=0), do_mask=False, return_all_blocks=return_all_blocks )
+        # Because some edge AI chip doesn't support batch_size > 1, 
+        # _encode_image(img1, ...) and _encode_image(img2, ...) seperately 
+        out, pos, _ = self._encode_image(img1, do_mask=False, return_all_blocks=return_all_blocks )
+        out2, pos2, _ = self._encode_image(img2, do_mask=False, return_all_blocks=return_all_blocks )
         if return_all_blocks:
-            out,out2 = list(map(list, zip(*[o.chunk(2, dim=0) for o in out])))
-            out2 = out2[-1]
-        else:
-            out,out2 = out.chunk(2, dim=0)
-        pos,pos2 = pos.chunk(2, dim=0)            
+            out2 = out2[-1]            
         return out, out2, pos, pos2
 
     def forward(self, img1, img2):

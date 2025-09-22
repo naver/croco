@@ -1,0 +1,6 @@
+*.pt
+*.pdf
+*.pth
+*.onnx
+__pycache__
+.vscode
